@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import Callable, Optional, Tuple
 import numpy as np
 from PIL import Image
-from moviepy.editor import VideoClip, AudioFileClip, CompositeAudioClip
+
+# Robust fallback import supporting both MoviePy v1.x and v2.x
+try:
+    from moviepy.editor import VideoClip, AudioFileClip, CompositeAudioClip
+    MOVIEPY_V2 = False
+except ImportError:
+    from moviepy.video.VideoClip import VideoClip
+    from moviepy.audio.io.AudioFileClip import AudioFileClip
+    from moviepy.audio.AudioClip import CompositeAudioClip
+    MOVIEPY_V2 = True
 
 from project import QuizProject
 from templates import TemplateRegistry
@@ -75,15 +84,28 @@ class VideoExporter:
         if self.project.audio_track_path and Path(self.project.audio_track_path).exists():
             try:
                 bg_audio = AudioFileClip(self.project.audio_track_path)
-                # Loop background audio if shorter than total video duration
-                if bg_audio.duration < total_duration:
-                    bg_audio = bg_audio.loop(duration=total_duration)
-                else:
-                    bg_audio = bg_audio.subclip(0, total_duration)
                 
-                # Lower background audio volume
-                bg_audio = bg_audio.volumex(0.2)
-                video_clip = video_clip.set_audio(bg_audio)
+                # Handle audio processing across MoviePy versions
+                if MOVIEPY_V2:
+                    from moviepy.audio.fx.loop import loop
+                    from moviepy.audio.fx.multiply_volume import multiply_volume
+                    
+                    if bg_audio.duration < total_duration:
+                        bg_audio = loop(bg_audio, duration=total_duration)
+                    else:
+                        bg_audio = bg_audio.subclipped(0, total_duration)
+                        
+                    bg_audio = multiply_volume(bg_audio, 0.2)
+                    video_clip = video_clip.with_audio(bg_audio)
+                else:
+                    if bg_audio.duration < total_duration:
+                        bg_audio = bg_audio.loop(duration=total_duration)
+                    else:
+                        bg_audio = bg_audio.subclip(0, total_duration)
+                        
+                    bg_audio = bg_audio.volumex(0.2)
+                    video_clip = video_clip.set_audio(bg_audio)
+                    
             except Exception as e:
                 print(f"[Warning] Failed to attach audio track: {e}")
 
