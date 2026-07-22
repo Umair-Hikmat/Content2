@@ -10,10 +10,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Union
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from config import config
-from logger import logger
-from constants import RESOLUTIONS, FRAME_RATES
-
 
 class QuizOption(BaseModel):
     model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
@@ -29,32 +25,44 @@ class TimelineScene(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     scene_type: str = "question"  # intro, question, timer, reveal, explanation, cta, outro
-    template_name: str = "trivia"
+    template_name: str = "General Trivia"
     duration: float = 5.0
-    question_text: str = ""
+    
+    # Text Content & Styling
+    question_text: str = "Sample Question?"
+    question_font_size: int = 48
     options: List[QuizOption] = Field(default_factory=list)
+    option_font_size: int = 36
     correct_answer: str = ""
     explanation_text: str = ""
+    
+    # Voiceover & Audio Speech Settings
     voice_over_text: str = ""
-    voice_provider: str = "Edge TTS"
+    voice_provider: str = "Edge TTS"  # Edge TTS, ElevenLabs, Custom Clone
     voice_name: str = "en-US-ChristopherNeural"
+    voice_clone_id: str = ""
     voice_speed: float = 1.0
     voice_pitch: float = 1.0
-    background_type: str = "Solid Color"
-    background_value: str = "#0F0F1B"  # Hex, file path, or gradient config
+    
+    # Background Configurations
+    background_type: str = "Animated Gradient"  # Solid Color, Animated Gradient, Custom Image
+    background_color_1: str = "#0F0F1B"
+    background_color_2: str = "#6C5CE7"
+    background_image_path: Optional[str] = None
+    
+    # Audio & SFX Tracks
     background_music: Optional[str] = None
     music_volume: float = 0.3
     sfx_correct: Optional[str] = None
     sfx_wrong: Optional[str] = None
+    
     custom_data: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("options", mode="before")
     @classmethod
     def convert_options(cls, value: Any) -> List[QuizOption]:
-        """Ensures raw strings, dicts, or QuizOption objects are safely converted."""
         if not value:
             return []
-        
         parsed_options = []
         for opt in value:
             if isinstance(opt, QuizOption):
@@ -64,6 +72,17 @@ class TimelineScene(BaseModel):
             elif isinstance(opt, str):
                 parsed_options.append(QuizOption(text=opt))
         return parsed_options
+
+
+class WatermarkSettings(BaseModel):
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
+
+    enabled: bool = False
+    image_path: Optional[str] = None
+    text: str = "@MyQuizChannel"
+    position: str = "Top Right"  # Top Left, Top Right, Bottom Left, Bottom Right
+    opacity: float = 0.8
+    scale: float = 0.15  # % of screen width
 
 
 class ProjectSettings(BaseModel):
@@ -76,6 +95,7 @@ class ProjectSettings(BaseModel):
     quality: str = "High Quality"
     quiz_type: str = "General Trivia"
     theme_name: str = "Cyberpunk Dark"
+    watermark: WatermarkSettings = Field(default_factory=WatermarkSettings)
 
 
 class QuizProject(BaseModel):
@@ -88,79 +108,42 @@ class QuizProject(BaseModel):
     project_dir: Optional[Path] = None
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     scenes: List[TimelineScene] = Field(default_factory=list)
-    audio_track_path: Optional[str] = None
 
-    # --- Flexible Scene Management Helpers ---
-
-    def add_scene(
-        self,
-        scene_or_type: Optional[Any] = None,
-        duration: float = 5.0,
-        question_text: str = "",
-        options: Optional[List[Any]] = None,
-        correct_answer: str = "",
-        explanation_text: str = "",
-        **kwargs: Any
-    ) -> TimelineScene:
-        """
-        Flexibly appends a TimelineScene to the project.
-        Supports passing a TimelineScene object directly OR keyword parameters.
-        """
+    def add_scene(self, scene_or_type: Optional[Any] = None, **kwargs: Any) -> TimelineScene:
         if isinstance(scene_or_type, TimelineScene):
             scene = scene_or_type
         elif isinstance(scene_or_type, dict):
             scene = TimelineScene(**scene_or_type)
         else:
             scene_type = scene_or_type if isinstance(scene_or_type, str) else "question"
-            scene = TimelineScene(
-                scene_type=scene_type,
-                duration=duration,
-                question_text=question_text,
-                options=options or [],
-                correct_answer=correct_answer,
-                explanation_text=explanation_text,
-                **kwargs
-            )
+            scene = TimelineScene(scene_type=scene_type, **kwargs)
 
         self.scenes.append(scene)
         return scene
 
     def remove_scene(self, scene_id: str) -> bool:
-        """Removes a scene by its unique scene ID."""
-        initial_length = len(self.scenes)
+        initial = len(self.scenes)
         self.scenes = [s for s in self.scenes if s.id != scene_id]
-        return len(self.scenes) < initial_length
+        return len(self.scenes) < initial
 
-    def move_scene(self, old_index: int, new_index: int) -> None:
-        """Reorders scenes in the timeline list."""
-        if 0 <= old_index < len(self.scenes) and 0 <= new_index < len(self.scenes):
-            scene = self.scenes.pop(old_index)
-            self.scenes.insert(new_index, scene)
-
-    # --- Properties required by VideoExporter & App ---
+    def move_scene(self, old_idx: int, new_idx: int) -> None:
+        if 0 <= old_idx < len(self.scenes) and 0 <= new_idx < len(self.scenes):
+            scene = self.scenes.pop(old_idx)
+            self.scenes.insert(new_idx, scene)
 
     @property
     def total_duration(self) -> float:
-        """Calculates the cumulative duration of all scenes in seconds."""
-        return sum(scene.duration for scene in self.scenes)
+        return sum(s.duration for s in self.scenes) or 1.0
 
     @property
     def resolution(self) -> Tuple[int, int]:
-        """Returns resolution width and height as a tuple."""
         return (self.settings.width, self.settings.height)
 
     @property
-    def fps(self) -> int:
-        """Returns current frame rate setting."""
-        return self.settings.fps
-
-    @property
     def theme_palette(self) -> Dict[str, str]:
-        """Provides default theme color values for template frame rendering."""
         return {
             "background": "#0F0F1B",
             "primary": "#6C5CE7",
-            "secondary": "#A29BFE",
             "text": "#FFFFFF",
             "accent": "#00CEC9",
             "correct": "#00B894",
@@ -168,60 +151,11 @@ class QuizProject(BaseModel):
         }
 
     def get_scene_at_time(self, t: float) -> Tuple[Optional[TimelineScene], float]:
-        """
-        Calculates which scene is active at timeline timestamp t.
-        Returns a tuple of (scene, scene_local_time).
-        """
         if not self.scenes:
             return None, 0.0
-
         accumulated = 0.0
         for scene in self.scenes:
             if accumulated <= t < accumulated + scene.duration:
                 return scene, t - accumulated
             accumulated += scene.duration
-
-        if t >= accumulated and self.scenes:
-            return self.scenes[-1], self.scenes[-1].duration
-
-        return None, 0.0
-
-    def set_resolution(self, resolution_name: str) -> None:
-        """Sets project dimensions based on constant preset."""
-        if resolution_name in RESOLUTIONS:
-            w, h = RESOLUTIONS[resolution_name]
-            self.settings.resolution_name = resolution_name
-            self.settings.width = w
-            self.settings.height = h
-
-    def save(self) -> Path:
-        """Saves the project data model to disk as project.json."""
-        self.updated_at = time.time()
-        if not self.project_dir:
-            safe_name = self.title.lower().replace(" ", "_")
-            self.project_dir = config.paths.projects_dir / f"{safe_name}_{self.project_id[:8]}"
-
-        self.project_dir.mkdir(parents=True, exist_ok=True)
-        file_path = self.project_dir / "project.json"
-
-        data = self.model_dump(mode="json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, default=str)
-
-        logger.info(f"Project '{self.title}' successfully saved to {file_path}")
-        return file_path
-
-    @classmethod
-    def load(cls, project_dir: Path) -> "QuizProject":
-        """Loads a QuizProject from a folder containing project.json."""
-        json_path = project_dir / "project.json" if project_dir.is_dir() else project_dir
-        if not json_path.exists():
-            raise FileNotFoundError(f"No project file found at {json_path}")
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        project = cls(**data)
-        project.project_dir = json_path.parent
-        logger.info(f"Loaded project '{project.title}' from disk.")
-        return project
+        return self.scenes[-1], self.scenes[-1].duration
