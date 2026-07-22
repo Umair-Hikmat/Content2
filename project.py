@@ -4,9 +4,10 @@ including scene timeline structures, metadata, and JSON persistence.
 """
 
 import json
+import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field, ConfigDict
 
 from config import config
@@ -24,6 +25,7 @@ class QuizOption(BaseModel):
 class TimelineScene(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     scene_type: str = "question"  # intro, question, timer, reveal, explanation, cta, outro
+    template_name: str = "trivia"
     duration: float = 5.0
     question_text: str = ""
     options: List[QuizOption] = Field(default_factory=list)
@@ -58,11 +60,98 @@ class QuizProject(BaseModel):
 
     project_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = "Untitled Quiz Project"
-    created_at: float = Field(default_factory=lambda: Path.stat(Path.cwd()).st_ctime)
-    updated_at: float = Field(default_factory=lambda: Path.stat(Path.cwd()).st_mtime)
+    created_at: float = Field(default_factory=lambda: time.time())
+    updated_at: float = Field(default_factory=lambda: time.time())
     project_dir: Optional[Path] = None
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     scenes: List[TimelineScene] = Field(default_factory=list)
+    audio_track_path: Optional[str] = None
+
+    # --- Scene Management Helpers ---
+
+    def add_scene(
+        self,
+        scene_type: str = "question",
+        duration: float = 5.0,
+        question_text: str = "",
+        options: Optional[List[QuizOption]] = None,
+        correct_answer: str = "",
+        explanation_text: str = "",
+        **kwargs: Any
+    ) -> TimelineScene:
+        """Creates and appends a new TimelineScene to the project timeline."""
+        scene = TimelineScene(
+            scene_type=scene_type,
+            duration=duration,
+            question_text=question_text,
+            options=options or [],
+            correct_answer=correct_answer,
+            explanation_text=explanation_text,
+            **kwargs
+        )
+        self.scenes.append(scene)
+        return scene
+
+    def remove_scene(self, scene_id: str) -> bool:
+        """Removes a scene by its unique scene ID."""
+        initial_length = len(self.scenes)
+        self.scenes = [s for s in self.scenes if s.id != scene_id]
+        return len(self.scenes) < initial_length
+
+    def move_scene(self, old_index: int, new_index: int) -> None:
+        """Reorders scenes in the timeline list."""
+        if 0 <= old_index < len(self.scenes) and 0 <= new_index < len(self.scenes):
+            scene = self.scenes.pop(old_index)
+            self.scenes.insert(new_index, scene)
+
+    # --- Properties required by VideoExporter & App ---
+
+    @property
+    def total_duration(self) -> float:
+        """Calculates the cumulative duration of all scenes in seconds."""
+        return sum(scene.duration for scene in self.scenes)
+
+    @property
+    def resolution(self) -> Tuple[int, int]:
+        """Returns resolution width and height as a tuple."""
+        return (self.settings.width, self.settings.height)
+
+    @property
+    def fps(self) -> int:
+        """Returns current frame rate setting."""
+        return self.settings.fps
+
+    @property
+    def theme_palette(self) -> Dict[str, str]:
+        """Provides default theme color values for template frame rendering."""
+        return {
+            "background": "#0F0F1B",
+            "primary": "#6C5CE7",
+            "secondary": "#A29BFE",
+            "text": "#FFFFFF",
+            "accent": "#00CEC9",
+            "correct": "#00B894",
+            "wrong": "#FF7675"
+        }
+
+    def get_scene_at_time(self, t: float) -> Tuple[Optional[TimelineScene], float]:
+        """
+        Calculates which scene is active at timeline timestamp t.
+        Returns a tuple of (scene, scene_local_time).
+        """
+        if not self.scenes:
+            return None, 0.0
+
+        accumulated = 0.0
+        for scene in self.scenes:
+            if accumulated <= t < accumulated + scene.duration:
+                return scene, t - accumulated
+            accumulated += scene.duration
+
+        if t >= accumulated and self.scenes:
+            return self.scenes[-1], self.scenes[-1].duration
+
+        return None, 0.0
 
     def set_resolution(self, resolution_name: str) -> None:
         """Sets project dimensions based on constant preset."""
@@ -74,6 +163,7 @@ class QuizProject(BaseModel):
 
     def save(self) -> Path:
         """Saves the project data model to disk as project.json."""
+        self.updated_at = time.time()
         if not self.project_dir:
             safe_name = self.title.lower().replace(" ", "_")
             self.project_dir = config.paths.projects_dir / f"{safe_name}_{self.project_id[:8]}"
