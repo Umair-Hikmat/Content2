@@ -9,17 +9,21 @@ from pathlib import Path
 from typing import Dict, Optional
 from pydantic import BaseModel, Field
 
+# ==========================================
+# FIX: Define BASE_DIR globally for app.py
+# ==========================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class SystemPaths(BaseModel):
-    base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve())
-    assets_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "assets")
-    projects_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "projects")
-    output_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "output")
-    cache_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / ".cache")
-    temp_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "temp")
-    music_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "assets" / "music")
-    sfx_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "assets" / "sfx")
-    fonts_dir: Path = Field(default_factory=lambda: Path(__file__).parent.resolve() / "assets" / "fonts")
+    base_dir: Path = Field(default_factory=lambda: Path(BASE_DIR))
+    assets_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "assets")
+    projects_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "projects")
+    output_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "output")
+    cache_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / ".cache")
+    temp_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "temp")
+    music_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "assets" / "music")
+    sfx_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "assets" / "sfx")
+    fonts_dir: Path = Field(default_factory=lambda: Path(BASE_DIR) / "assets" / "fonts")
 
     class Config:
         arbitrary_types_allowed = True
