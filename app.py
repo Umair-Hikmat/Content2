@@ -1,11 +1,12 @@
 """
 Quiz Studio Pro - Master Application Pipeline
 Integrates custom quiz types (Emoji, Flag, Logo, Fill-Blank, Trivia), Voiceover (TTS), 
-Background Music, AI Generation, Batch Import, and Fast Video Export.
+Background Music, AI Generation, Batch Import, and Live Preview Player.
 """
 
 import sys
 import os
+import time
 
 # Ensure the app root directory is in Python's import search path
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -170,35 +171,82 @@ st.title("🎬 Quiz Studio Pro Engine")
 col_canvas, col_editor = st.columns([1.1, 0.9])
 
 # ---------------------------------------------------------
-# LEFT COLUMN: CANVAS PREVIEW & FAST EXPORT
+# LEFT COLUMN: CANVAS PREVIEW & WATCH PREVIEW PLAYER
 # ---------------------------------------------------------
 with col_canvas:
     st.subheader("📺 Real-Time Canvas Preview")
 
     total_dur = max(1.0, project.total_duration)
-    scrub_time = st.slider("⏱️ Timeline Scrubber (Seconds)", 0.0, total_dur, 0.0, step=0.1)
 
-    scene, scene_time = project.get_scene_at_time(scrub_time)
+    # Mode Selector: Manual Scrubbing vs. Animated Preview Playback
+    preview_mode = st.radio(
+        "Preview Mode", 
+        ["🎛️ Manual Scrubber", "▶️ Watch Live Preview"], 
+        horizontal=True
+    )
 
-    if scene:
-        # Get appropriate template engine based on scene structure
-        template_key = scene.template_name
-        template = TemplateRegistry.get(template_key)
-        
-        frame_img = template.render_frame(
-            scene=scene,
-            time_sec=scene_time,
-            resolution=project.resolution,
-            palette=project.theme_palette
-        )
-        
-        if hasattr(project, "settings") and hasattr(project.settings, "watermark"):
-            frame_img = apply_watermark(frame_img, project.settings.watermark)
+    canvas_placeholder = st.empty()
+    caption_placeholder = st.empty()
+
+    if preview_mode == "▶️ Watch Live Preview":
+        p_col1, p_col2 = st.columns([1, 1])
+        with p_col1:
+            fps_preview = st.slider("Preview Frame Rate (FPS)", 5, 20, 10)
+        with p_col2:
+            play_button = st.button("▶️ Play / Replay Animation", type="primary", use_container_width=True)
+
+        if play_button:
+            dt = 1.0 / fps_preview
+            current_t = 0.0
             
-        st.image(frame_img, use_container_width=True)
-        st.caption(f"Active Structure: **{scene.template_name}** | Active Time: `{scene_time:.1f}s / {scene.duration:.1f}s`")
+            while current_t <= total_dur:
+                scene, scene_time = project.get_scene_at_time(current_t)
+                if scene:
+                    template_key = scene.template_name
+                    template = TemplateRegistry.get(template_key)
+                    
+                    frame_img = template.render_frame(
+                        scene=scene,
+                        time_sec=scene_time,
+                        resolution=project.resolution,
+                        palette=project.theme_palette
+                    )
+                    
+                    if hasattr(project, "settings") and hasattr(project.settings, "watermark"):
+                        frame_img = apply_watermark(frame_img, project.settings.watermark)
+
+                    canvas_placeholder.image(frame_img, use_container_width=True)
+                    caption_placeholder.caption(
+                        f"▶️ **Playing Live Preview** | Active Scene: **{scene.template_name}** | `{current_t:.1f}s / {total_dur:.1f}s`"
+                    )
+                
+                time.sleep(dt)
+                current_t += dt
     else:
-        st.info("No scenes active at this timestamp.")
+        # Standard Manual Scrubber Mode
+        scrub_time = st.slider("⏱️ Timeline Scrubber (Seconds)", 0.0, total_dur, 0.0, step=0.1)
+        scene, scene_time = project.get_scene_at_time(scrub_time)
+
+        if scene:
+            template_key = scene.template_name
+            template = TemplateRegistry.get(template_key)
+            
+            frame_img = template.render_frame(
+                scene=scene,
+                time_sec=scene_time,
+                resolution=project.resolution,
+                palette=project.theme_palette
+            )
+            
+            if hasattr(project, "settings") and hasattr(project.settings, "watermark"):
+                frame_img = apply_watermark(frame_img, project.settings.watermark)
+                
+            canvas_placeholder.image(frame_img, use_container_width=True)
+            caption_placeholder.caption(
+                f"Active Structure: **{scene.template_name}** | Active Time: `{scene_time:.1f}s / {scene.duration:.1f}s`"
+            )
+        else:
+            canvas_placeholder.info("No scenes active at this timestamp.")
 
     st.divider()
 
