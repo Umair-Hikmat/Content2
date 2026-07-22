@@ -4,7 +4,14 @@ Integrates custom quiz types (Emoji, Flag, Logo, Fill-Blank, Trivia), Voiceover 
 Background Music, AI Generation, Batch Import, and Fast Video Export.
 """
 
+import sys
 import os
+
+# Ensure the app root directory is in Python's import search path
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+if APP_ROOT not in sys.path:
+    sys.path.insert(0, APP_ROOT)
+
 import io
 import numpy as np
 import streamlit as st
@@ -210,7 +217,13 @@ with col_canvas:
                 )
             else:
                 # Fallback internal batch builder
-                from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+                try:
+                    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+                except ImportError:
+                    try:
+                        from moviepy.editor import ImageSequenceClip
+                    except ImportError:
+                        from moviepy import ImageSequenceClip
                 
                 frames = []
                 dt = 1.0 / render_fps
