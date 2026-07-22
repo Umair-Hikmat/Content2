@@ -3,9 +3,18 @@ Quiz Studio Dashboard with Live Scrubber, Custom Font Controls, and 1-Click MP4 
 """
 
 import os
+import numpy as np
 import streamlit as st
 from PIL import Image
-from moviepy.editor import ImageSequenceClip
+
+# MoviePy v2.x and v1.x compatible import
+try:
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+except ImportError:
+    try:
+        from moviepy.editor import ImageSequenceClip
+    except ImportError:
+        from moviepy import ImageSequenceClip
 
 from project import QuizProject, TimelineScene, QuizOption
 from templates import TemplateRegistry, apply_watermark
@@ -71,7 +80,7 @@ with col_preview:
     if st.button("🚀 Render & Play Full Video MP4", type="primary", use_container_width=True):
         with st.spinner("Rendering full video clip... Please wait..."):
             frames = []
-            fps = 15  # Fast render preview fps
+            fps = 15  # Preview render framerate
             dt = 1.0 / fps
             
             # Step through entire timeline
@@ -82,8 +91,6 @@ with col_preview:
                     tmpl = TemplateRegistry.get(s.template_name)
                     img = tmpl.render_frame(s, local_t, project.resolution, project.theme_palette)
                     img = apply_watermark(img, project.settings.watermark)
-                    # Convert PIL image to array
-                    import numpy as np
                     frames.append(np.array(img.convert("RGB")))
                 t += dt
 
@@ -128,10 +135,11 @@ with col_controls:
 
         # TAB 1: TEMPLATE & REAL-TIME FONT CONTROLS
         with tab_design:
+            available_templates = TemplateRegistry.list_templates()
             active_scene.template_name = st.selectbox(
                 "Select Layout Template",
-                TemplateRegistry.list_templates(),
-                index=TemplateRegistry.list_templates().index(active_scene.template_name) if active_scene.template_name in TemplateRegistry.list_templates() else 0
+                available_templates,
+                index=available_templates.index(active_scene.template_name) if active_scene.template_name in available_templates else 0
             )
 
             st.write("**Font Sizing Controls (Live Canvas Update):**")
