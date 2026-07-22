@@ -171,7 +171,23 @@ if app_mode == "Scene Editor & Preview":
             )
 
             # Render frame using registered template engine
-            template = TemplateRegistry.get(scene.template_name)
+                        # --- BEFORE ---
+            # template = TemplateRegistry.get(scene.template_name)
+            
+            # --- AFTER ---
+            # Try standard getter methods safely
+            if hasattr(TemplateRegistry, 'get') and callable(getattr(TemplateRegistry, 'get')):
+                template = TemplateRegistry.get(scene.template_name)
+            elif hasattr(TemplateRegistry, 'get_template') and callable(getattr(TemplateRegistry, 'get_template')):
+                template = TemplateRegistry.get_template(scene.template_name)
+            elif hasattr(TemplateRegistry, 'templates') and isinstance(TemplateRegistry.templates, dict):
+                template = TemplateRegistry.templates.get(scene.template_name)
+            elif hasattr(TemplateRegistry, 'TEMPLATES') and isinstance(TemplateRegistry.TEMPLATES, dict):
+                template = TemplateRegistry.TEMPLATES.get(scene.template_name)
+            else:
+                # If TemplateRegistry is a dictionary itself
+                template = TemplateRegistry.get(scene.template_name, None) if isinstance(TemplateRegistry, dict) else None
+            #template = TemplateRegistry.get(scene.template_name)
             res = st.session_state.project.resolution
             
             pil_frame = template.render_frame(
