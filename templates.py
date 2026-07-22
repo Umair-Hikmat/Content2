@@ -4,7 +4,7 @@ Serves as abstract framework for modular quiz layout handlers (Trivia, Emojis, L
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 from PIL import Image, ImageDraw
 
 from project import TimelineScene
@@ -68,9 +68,20 @@ class TemplateRegistry:
     @classmethod
     def get_template(cls, template_name: str) -> Optional[BaseQuizTemplate]:
         """Retrieves a registered template engine by name."""
-        return cls._registry.get(template_name, cls._registry.get("General Trivia"))
+        if not cls._registry:
+            return None
+        # Try direct match -> fallback to 'General Trivia' -> fallback to any available template
+        return cls._registry.get(
+            template_name, 
+            cls._registry.get("General Trivia", next(iter(cls._registry.values()), None))
+        )
 
     @classmethod
-    def list_templates(self) -> List[str]:
+    def get(cls, template_name: str) -> Optional[BaseQuizTemplate]:
+        """Alias for get_template to prevent AttributeError when app.py calls TemplateRegistry.get()."""
+        return cls.get_template(template_name)
+
+    @classmethod
+    def list_templates(cls) -> List[str]:
         """Returns registered template names."""
-        return list(self._registry.keys())
+        return list(cls._registry.keys())
