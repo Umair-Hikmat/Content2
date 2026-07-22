@@ -7,7 +7,7 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from config import config
@@ -19,7 +19,7 @@ class QuizOption(BaseModel):
     model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
-    text: str
+    text: str = ""
     is_correct: bool = False
     image_path: Optional[str] = None
 
@@ -90,11 +90,11 @@ class QuizProject(BaseModel):
     scenes: List[TimelineScene] = Field(default_factory=list)
     audio_track_path: Optional[str] = None
 
-    # --- Scene Management Helpers ---
+    # --- Flexible Scene Management Helpers ---
 
     def add_scene(
         self,
-        scene_type: str = "question",
+        scene_or_type: Optional[Any] = None,
         duration: float = 5.0,
         question_text: str = "",
         options: Optional[List[Any]] = None,
@@ -102,16 +102,26 @@ class QuizProject(BaseModel):
         explanation_text: str = "",
         **kwargs: Any
     ) -> TimelineScene:
-        """Creates and appends a new TimelineScene to the project timeline."""
-        scene = TimelineScene(
-            scene_type=scene_type,
-            duration=duration,
-            question_text=question_text,
-            options=options or [],
-            correct_answer=correct_answer,
-            explanation_text=explanation_text,
-            **kwargs
-        )
+        """
+        Flexibly appends a TimelineScene to the project.
+        Supports passing a TimelineScene object directly OR keyword parameters.
+        """
+        if isinstance(scene_or_type, TimelineScene):
+            scene = scene_or_type
+        elif isinstance(scene_or_type, dict):
+            scene = TimelineScene(**scene_or_type)
+        else:
+            scene_type = scene_or_type if isinstance(scene_or_type, str) else "question"
+            scene = TimelineScene(
+                scene_type=scene_type,
+                duration=duration,
+                question_text=question_text,
+                options=options or [],
+                correct_answer=correct_answer,
+                explanation_text=explanation_text,
+                **kwargs
+            )
+
         self.scenes.append(scene)
         return scene
 
