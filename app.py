@@ -17,10 +17,23 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-# Import Core Configuration & Models
+# Import Core Configuration
 from config import BASE_DIR
-from models import QuizProject, TimelineScene, QuizOption
-from settings import AppSettings
+
+# Import Models with safe fallback resolution
+try:
+    from models import QuizProject, TimelineScene, QuizOption
+except ImportError:
+    import models
+    QuizProject = getattr(models, "QuizProject", getattr(models, "Project", None))
+    TimelineScene = getattr(models, "TimelineScene", getattr(models, "Scene", None))
+    QuizOption = getattr(models, "QuizOption", getattr(models, "Option", None))
+
+# Import Settings
+try:
+    from settings import AppSettings
+except ImportError:
+    AppSettings = None
 
 # Import Templates Engine
 from templates import TemplateRegistry, apply_watermark
