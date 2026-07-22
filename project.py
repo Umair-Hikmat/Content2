@@ -8,7 +8,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from config import config
 from logger import logger
@@ -16,6 +16,8 @@ from constants import RESOLUTIONS, FRAME_RATES
 
 
 class QuizOption(BaseModel):
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     text: str
     is_correct: bool = False
@@ -23,6 +25,8 @@ class QuizOption(BaseModel):
 
 
 class TimelineScene(BaseModel):
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     scene_type: str = "question"  # intro, question, timer, reveal, explanation, cta, outro
     template_name: str = "trivia"
@@ -44,8 +48,27 @@ class TimelineScene(BaseModel):
     sfx_wrong: Optional[str] = None
     custom_data: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("options", mode="before")
+    @classmethod
+    def convert_options(cls, value: Any) -> List[QuizOption]:
+        """Ensures raw strings, dicts, or QuizOption objects are safely converted."""
+        if not value:
+            return []
+        
+        parsed_options = []
+        for opt in value:
+            if isinstance(opt, QuizOption):
+                parsed_options.append(opt)
+            elif isinstance(opt, dict):
+                parsed_options.append(QuizOption(**opt))
+            elif isinstance(opt, str):
+                parsed_options.append(QuizOption(text=opt))
+        return parsed_options
+
 
 class ProjectSettings(BaseModel):
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
+
     resolution_name: str = "9:16 Vertical (Shorts/TikTok/Reels)"
     width: int = 1080
     height: int = 1920
@@ -56,7 +79,7 @@ class ProjectSettings(BaseModel):
 
 
 class QuizProject(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
 
     project_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = "Untitled Quiz Project"
@@ -74,7 +97,7 @@ class QuizProject(BaseModel):
         scene_type: str = "question",
         duration: float = 5.0,
         question_text: str = "",
-        options: Optional[List[QuizOption]] = None,
+        options: Optional[List[Any]] = None,
         correct_answer: str = "",
         explanation_text: str = "",
         **kwargs: Any
