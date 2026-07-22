@@ -1,11 +1,22 @@
 """
-Template Registry and Base Quiz Layout Engine with full customization support.
+Modular Quiz Layout Renderers with multiple template themes.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Dict, Any, Tuple, List, Optional
 import math
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+
+
+def get_pil_font(font_size: int, font_name: str = "arial.ttf") -> ImageFont.FreeTypeFont:
+    """Safely loads PIL font with size fallback."""
+    try:
+        return ImageFont.truetype(font_name, font_size)
+    except IOError:
+        try:
+            return ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except IOError:
+            return ImageFont.load_default()
 
 
 class BaseQuizTemplate(ABC):
@@ -24,111 +35,168 @@ class BaseQuizTemplate(ABC):
     ) -> Image.Image:
         pass
 
-    def render_background(
-        self,
-        scene: Any,
-        time_sec: float,
-        resolution: Tuple[int, int]
-    ) -> Image.Image:
-        """Renders solid colors, dynamic animated gradients, or loaded custom background images."""
-        w, h = resolution
-        img = Image.new("RGBA", (w, h), (15, 15, 27, 255))
-        draw = ImageDraw.Draw(img)
-
-        if scene.background_type == "Solid Color":
-            draw.rectangle([(0, 0), (w, h)], fill=scene.background_color_1)
-        elif scene.background_type == "Animated Gradient":
-            # Animated shift based on time_sec
-            shift = (math.sin(time_sec * 1.5) + 1.0) / 2.0
-            for y in range(0, h, 8):
-                ratio = (y / h) * 0.7 + (shift * 0.3)
-                # Linear blend between color 1 and color 2
-                r = int(15 + ratio * 90)
-                g = int(15 + ratio * 60)
-                b = int(27 + ratio * 150)
-                draw.rectangle([(0, y), (w, y + 8)], fill=(r, g, b, 255))
-        elif scene.background_type == "Custom Image" and scene.background_image_path:
-            try:
-                bg = Image.open(scene.background_image_path).convert("RGBA")
-                bg = bg.resize((w, h))
-                img.paste(bg, (0, 0))
-            except Exception:
-                draw.rectangle([(0, 0), (w, h)], fill=scene.background_color_1)
-
-        return img
-
-    def draw_timer_gauge(
+    def draw_timer_bar(
         self,
         draw: ImageDraw.ImageDraw,
         box: Tuple[int, int, int, int],
         remaining_ratio: float,
-        color: str = "#FFE600",
-        background_color: str = "#2A2A3D",
+        fill_color: str = "#FFE600",
+        bg_color: str = "#1E1E2E",
     ) -> None:
         x1, y1, x2, y2 = box
-        draw.rounded_rectangle([(x1, y1), (x2, y2)], radius=8, fill=background_color)
-        fill_width = max(0, int((x2 - x1) * max(0.0, min(1.0, remaining_ratio))))
-        if fill_width > 0:
-            draw.rounded_rectangle([(x1, y1), (x1 + fill_width, y2)], radius=8, fill=color)
+        draw.rounded_rectangle([(x1, y1), (x2, y2)], radius=10, fill=bg_color)
+        fill_w = max(0, int((x2 - x1) * max(0.0, min(1.0, remaining_ratio))))
+        if fill_w > 0:
+            draw.rounded_rectangle([(x1, y1), (x1 + fill_w, y2)], radius=10, fill=fill_color)
 
 
-class DefaultTriviaTemplate(BaseQuizTemplate):
+# ---------------------------------------------------------
+# TEMPLATE 1: Neon Cyberpunk (Glows, Gradients & Tech Vibe)
+# ---------------------------------------------------------
+class NeonCyberpunkTemplate(BaseQuizTemplate):
     @property
     def template_name(self) -> str:
-        return "General Trivia"
+        return "Neon Cyberpunk"
 
-    def render_frame(
-        self,
-        scene: Any,
-        time_sec: float,
-        resolution: Tuple[int, int],
-        palette: Dict[str, str],
-    ) -> Image.Image:
+    def render_frame(self, scene: Any, time_sec: float, resolution: Tuple[int, int], palette: Dict[str, str]) -> Image.Image:
         w, h = resolution
-        img = self.render_background(scene, time_sec, resolution)
+        img = Image.new("RGBA", (w, h), (15, 15, 30, 255))
         draw = ImageDraw.Draw(img)
 
-        # 1. Render Question Box
-        q_box = [int(w * 0.08), int(h * 0.15), int(w * 0.92), int(h * 0.38)]
-        draw.rounded_rectangle(q_box, radius=16, fill=(20, 20, 35, 220), outline=palette.get("accent", "#00CEC9"), width=3)
-        
-        # Question Text with Custom Font Size
-        try:
-            font = ImageFont.truetype("arial.ttf", scene.question_font_size)
-        except IOError:
-            font = ImageFont.load_default()
-            
-        draw.text((w // 2, int(h * 0.26)), scene.question_text or "Your Question Here", fill="#FFFFFF", font=font, anchor="mm")
+        # Animated Gradient Background
+        shift = (math.sin(time_sec * 2.0) + 1.0) / 2.0
+        for y in range(0, h, 12):
+            r = int(10 + shift * 30)
+            g = int(10 + (y / h) * 40)
+            b = int(45 + (1.0 - shift) * 80)
+            draw.rectangle([(0, y), (w, y + 12)], fill=(r, g, b, 255))
 
-        # 2. Render Timer Progress Bar
+        # Question Box
+        q_box = [int(w * 0.08), int(h * 0.12), int(w * 0.92), int(h * 0.35)]
+        draw.rounded_rectangle(q_box, radius=20, fill=(25, 20, 50, 230), outline="#00F0FF", width=4)
+
+        # Question Text with DYNAMIC FONT SIZE
+        q_font = get_pil_font(scene.question_font_size)
+        draw.text((w // 2, int(h * 0.235)), scene.question_text or "Question?", fill="#FFFFFF", font=q_font, anchor="mm")
+
+        # Timer Bar
         remaining = max(0.0, 1.0 - (time_sec / max(0.1, scene.duration)))
-        self.draw_timer_gauge(draw, (int(w * 0.1), int(h * 0.40), int(w * 0.9), int(h * 0.42)), remaining)
+        self.draw_timer_bar(draw, (int(w * 0.1), int(h * 0.38), int(w * 0.9), int(h * 0.40)), remaining, fill_color="#FF007F")
 
-        # 3. Render Options
-        opt_y_start = int(h * 0.46)
-        opt_height = int(h * 0.09)
+        # Options
+        opt_font = get_pil_font(scene.option_font_size)
+        opt_y = int(h * 0.45)
+        opt_h = int(h * 0.09)
         spacing = int(h * 0.02)
 
-        try:
-            opt_font = ImageFont.truetype("arial.ttf", scene.option_font_size)
-        except IOError:
-            opt_font = ImageFont.load_default()
-
         for idx, option in enumerate(scene.options[:4]):
-            top = opt_y_start + idx * (opt_height + spacing)
-            box = [int(w * 0.1), top, int(w * 0.9), top + opt_height]
+            top = opt_y + idx * (opt_h + spacing)
+            box = [int(w * 0.1), top, int(w * 0.9), top + opt_h]
             
-            # Highlight correct answer if time reveals it (e.g. last 30% of duration)
-            fill_color = (35, 35, 55, 230)
-            if remaining < 0.3 and option.text and option.text == scene.correct_answer:
-                fill_color = (0, 184, 148, 240)  # Green correct highlight
+            fill = (35, 30, 65, 230)
+            border = "#7000FF"
+            if remaining < 0.25 and option.text == scene.correct_answer:
+                fill = (0, 230, 150, 240)
+                border = "#00FF99"
 
-            draw.rounded_rectangle(box, radius=12, fill=fill_color)
-            draw.text((box[0] + 30, top + opt_height // 2), f"{chr(65+idx)}. {option.text}", fill="#FFFFFF", font=opt_font, anchor="lm")
+            draw.rounded_rectangle(box, radius=14, fill=fill, outline=border, width=3)
+            draw.text((box[0] + 35, top + opt_h // 2), f"{chr(65+idx)}. {option.text}", fill="#FFFFFF", font=opt_font, anchor="lm")
 
         return img
 
 
+# ---------------------------------------------------------
+# TEMPLATE 2: Classic Game Show (Bright Gold & Blue Stage)
+# ---------------------------------------------------------
+class GameShowTemplate(BaseQuizTemplate):
+    @property
+    def template_name(self) -> str:
+        return "Classic Game Show"
+
+    def render_frame(self, scene: Any, time_sec: float, resolution: Tuple[int, int], palette: Dict[str, str]) -> Image.Image:
+        w, h = resolution
+        img = Image.new("RGBA", (w, h), (10, 25, 60, 255))
+        draw = ImageDraw.Draw(img)
+
+        # Stage Light Rays
+        draw.ellipse([int(-w*0.2), int(-h*0.1), int(w*1.2), int(h*0.5)], fill=(255, 215, 0, 40))
+
+        # Question Header Box
+        q_box = [int(w * 0.06), int(h * 0.14), int(w * 0.94), int(h * 0.36)]
+        draw.rounded_rectangle(q_box, radius=16, fill=(20, 45, 100, 240), outline="#FFD700", width=5)
+
+        # Dynamic Question Text
+        q_font = get_pil_font(scene.question_font_size)
+        draw.text((w // 2, int(h * 0.25)), scene.question_text or "Question?", fill="#FFD700", font=q_font, anchor="mm")
+
+        # Timer
+        remaining = max(0.0, 1.0 - (time_sec / max(0.1, scene.duration)))
+        self.draw_timer_bar(draw, (int(w * 0.1), int(h * 0.39), int(w * 0.9), int(h * 0.41)), remaining, fill_color="#FFD700")
+
+        # Option Buttons
+        opt_font = get_pil_font(scene.option_font_size)
+        opt_y = int(h * 0.46)
+        opt_h = int(h * 0.095)
+        spacing = int(h * 0.02)
+
+        for idx, option in enumerate(scene.options[:4]):
+            top = opt_y + idx * (opt_h + spacing)
+            box = [int(w * 0.08), top, int(w * 0.92), top + opt_h]
+
+            fill = (25, 60, 130, 230)
+            if remaining < 0.25 and option.text == scene.correct_answer:
+                fill = (0, 180, 80, 250)
+
+            draw.rounded_rectangle(box, radius=12, fill=fill, outline="#FFFFFF", width=2)
+            draw.text((box[0] + 40, top + opt_h // 2), f"{chr(65+idx)} :  {option.text}", fill="#FFFFFF", font=opt_font, anchor="lm")
+
+        return img
+
+
+# ---------------------------------------------------------
+# TEMPLATE 3: Minimal Dark (Clean Modern Aesthetics)
+# ---------------------------------------------------------
+class MinimalDarkTemplate(BaseQuizTemplate):
+    @property
+    def template_name(self) -> str:
+        return "Minimal Dark"
+
+    def render_frame(self, scene: Any, time_sec: float, resolution: Tuple[int, int], palette: Dict[str, str]) -> Image.Image:
+        w, h = resolution
+        img = Image.new("RGBA", (w, h), (18, 18, 22, 255))
+        draw = ImageDraw.Draw(img)
+
+        # Question
+        q_font = get_pil_font(scene.question_font_size)
+        draw.text((w // 2, int(h * 0.22)), scene.question_text or "Question?", fill="#E2E8F0", font=q_font, anchor="mm")
+
+        # Timer Line
+        remaining = max(0.0, 1.0 - (time_sec / max(0.1, scene.duration)))
+        draw.line([(int(w*0.1), int(h*0.35)), (int(w*0.1 + w*0.8*remaining), int(h*0.35))], fill="#38BDF8", width=6)
+
+        # Options
+        opt_font = get_pil_font(scene.option_font_size)
+        opt_y = int(h * 0.42)
+        opt_h = int(h * 0.085)
+        spacing = int(h * 0.02)
+
+        for idx, option in enumerate(scene.options[:4]):
+            top = opt_y + idx * (opt_h + spacing)
+            box = [int(w * 0.1), top, int(w * 0.9), top + opt_h]
+
+            fill = (30, 41, 59, 255)
+            if remaining < 0.25 and option.text == scene.correct_answer:
+                fill = (16, 185, 129, 255)
+
+            draw.rounded_rectangle(box, radius=10, fill=fill)
+            draw.text((box[0] + 30, top + opt_h // 2), f"{option.text}", fill="#F8FAFC", font=opt_font, anchor="lm")
+
+        return img
+
+
+# ---------------------------------------------------------
+# REGISTRY MANAGEMENT
+# ---------------------------------------------------------
 class TemplateRegistry:
     _registry: Dict[str, BaseQuizTemplate] = {}
 
@@ -138,7 +206,7 @@ class TemplateRegistry:
 
     @classmethod
     def get_template(cls, template_name: str) -> BaseQuizTemplate:
-        return cls._registry.get(template_name, cls._registry.get("General Trivia", DefaultTriviaTemplate()))
+        return cls._registry.get(template_name, cls._registry.get("Neon Cyberpunk", MinimalDarkTemplate()))
 
     @classmethod
     def get(cls, template_name: str) -> BaseQuizTemplate:
@@ -146,43 +214,31 @@ class TemplateRegistry:
 
     @classmethod
     def list_templates(cls) -> List[str]:
-        return list(cls._registry.keys()) or ["General Trivia"]
+        return list(cls._registry.keys())
 
 
-# Register Default Template on import
-TemplateRegistry.register(DefaultTriviaTemplate())
+# Register default collection
+TemplateRegistry.register(NeonCyberpunkTemplate())
+TemplateRegistry.register(GameShowTemplate())
+TemplateRegistry.register(MinimalDarkTemplate())
 
 
 def apply_watermark(img: Image.Image, watermark: Any) -> Image.Image:
-    """Overlays image logo or text watermark onto the final canvas frame."""
     if not watermark.enabled:
         return img
-
     w, h = img.size
     draw = ImageDraw.Draw(img)
-
-    try:
-        wm_font = ImageFont.truetype("arial.ttf", int(h * 0.025))
-    except IOError:
-        wm_font = ImageFont.load_default()
-
+    wm_font = get_pil_font(int(h * 0.025))
     margin = int(w * 0.05)
     
-    # Calculate position coordinates
-    if watermark.position == "Top Left":
-        pos = (margin, margin)
-        anchor = "la"
-    elif watermark.position == "Top Right":
-        pos = (w - margin, margin)
-        anchor = "ra"
-    elif watermark.position == "Bottom Left":
-        pos = (margin, h - margin)
-        anchor = "ld"
-    else:  # Bottom Right
-        pos = (w - margin, h - margin)
-        anchor = "rd"
+    pos_map = {
+        "Top Left": ((margin, margin), "la"),
+        "Top Right": ((w - margin, margin), "ra"),
+        "Bottom Left": ((margin, h - margin), "ld"),
+        "Bottom Right": ((w - margin, h - margin), "rd")
+    }
+    pos, anchor = pos_map.get(watermark.position, ((w - margin, margin), "ra"))
 
     if watermark.text:
         draw.text(pos, watermark.text, fill=(255, 255, 255, int(255 * watermark.opacity)), font=wm_font, anchor=anchor)
-
     return img
